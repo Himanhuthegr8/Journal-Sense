@@ -127,8 +127,23 @@ def fetch_openalex_journals(per_page: int = 200, max_pages: int = 5):
     cursor = "*"
     try:
         for _ in range(max_pages):
-            params = {"per-page": per_page, "cursor": cursor}
-            resp = requests.get("https://api.openalex.org/journals", params=params, timeout=15)
+            # Use 'sources' endpoint which is the new home for journals
+            # Filter for journals only and select specific fields to ensure quality
+            params = {
+                "filter": "type:journal,is_oa:true", # optional: prefer oa? no, let's just get journals. 
+                "per-page": per_page, 
+                "cursor": cursor,
+                "select": "id,display_name,abbreviated_title,host_organization_name,issn_l,x_concepts,homepage_url,type"
+            }
+            # Remove is_oa:true if you want all journals, but for 'recommender' usually high quality/accessible ones are preferred? 
+            # Actually user just wants valid links. 
+            # Let's stick to the base filter but be explicit.
+            params = {
+                "filter": "type:journal",
+                "per-page": per_page, 
+                "cursor": cursor,
+            }
+            resp = requests.get("https://api.openalex.org/sources", params=params, timeout=15)
             if resp.status_code != 200:
                 st.warning(f"OpenAlex API error: {resp.status_code}")
                 break
@@ -262,13 +277,20 @@ def recommend_journals(query, journals, index, model, domains=None, top_k=10):
             if domains and not set(domains) & set(j_domains):
                 continue
 
-            home = j.get("homepage_url") or j.get("id")
+            home = j.get("homepage_url")
+            link_text = "Official Site"
+            
+            # If homepage is missing OR it's an OpenAlex link, do not provide a URL
+            if not home or "openalex.org" in home:
+                home = None
+                link_text = "Link not available"
             recs.append({
                 "title": j["display_name"],
                 "abbr": j.get("abbreviated_title", ""),
                 "publisher": j.get("host_organization_name", "N/A"),
                 "issn": j.get("issn_l","N/A"),
                 "url": home,
+                "link_text": link_text,
                 "domains": j_domains,
                 "score": float(score)
             })
@@ -388,7 +410,10 @@ def main():
             st.markdown(f"- Domains: {', '.join(r['domains']) or 'N/A'}")
             st.markdown(f"- Impact Factor: {m['impact_factor']} | Acceptance: {m['acceptance_rate']}")
             st.markdown(f"- Indexing: {', '.join(m['indexing'])}")
-            st.markdown(f"- [Official site / OpenAlex page]({r['url']})")
+            if r['url']:
+                st.markdown(f"- [{r['link_text']}]({r['url']})")
+            else:
+                st.markdown("- *Link not available in database*")
             st.write("")  # spacer
             if shown >= num_rec:
                 break

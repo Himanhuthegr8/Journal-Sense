@@ -110,7 +110,7 @@ def process_data(topic, start_year, end_year, limit=200):
     params = {
         'filter': f'title.search:{topic},publication_year:{start_year}-{end_year}',
         'per_page': min(limit, 100),  # OpenAlex limits to 100 per page
-        'sort': 'publication_date:desc'
+        'sort': 'cited_by_count:desc'
     }
     
     works_data = fetch_openalex_data('works', params)
