@@ -387,6 +387,11 @@ def main():
     if st.sidebar.button("Update Dashboard"):
         st.session_state.update_clicked = True
         st.session_state.data = None  # Reset cached data
+        
+    if st.sidebar.button("Clear Cache & Refresh"):
+        st.cache_data.clear()
+        st.session_state.data = None
+        st.rerun()
     
     # Initialize session state
     if 'update_clicked' not in st.session_state:
