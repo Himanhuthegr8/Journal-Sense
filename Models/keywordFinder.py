@@ -12,6 +12,7 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 from sentence_transformers import SentenceTransformer
 import yake
 
@@ -261,20 +262,19 @@ def preprocess_text(text):
 def generate_wordcloud(keywords, width=800, height=400):
     """Generate a word cloud image from keywords"""
     if not keywords:
-        # Create a placeholder image with text
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.text(0.5, 0.5, "No keywords available", 
-                horizontalalignment='center', 
-                verticalalignment='center',
-                fontsize=18)
-        ax.axis('off')
+        # Create a placeholder image with text using PIL
+        img = Image.new('RGB', (width, height), color='white')
+        d = ImageDraw.Draw(img)
         
-        # Convert plot to image
-        buf = BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-        buf.seek(0)
-        plt.close(fig)
-        return buf
+        text = "No keywords available"
+        # Try to load a default font, otherwise use default
+        try:
+            # simple hack to center text roughly
+            d.text((width//2 - 100, height//2), text, fill="black", anchor="mm")
+        except Exception:
+             d.text((width//2, height//2), text, fill="black")
+             
+        return img
     
     wc = WordCloud(
         width=width,
@@ -288,18 +288,8 @@ def generate_wordcloud(keywords, width=800, height=400):
     # Generate word cloud
     wc.generate_from_frequencies(keywords)
     
-    # Create a figure and plot the word cloud
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.imshow(wc, interpolation='bilinear')
-    ax.axis('off')
-    
-    # Convert plot to image
-    buf = BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-    buf.seek(0)
-    plt.close(fig)
-    
-    return buf
+    # Return PIL image directly
+    return wc.to_image()
 
 def search_openalex(query, page=1, per_page=10, filter_string=""):
     """Search OpenAlex API for works matching the query"""
@@ -463,8 +453,32 @@ def main():
         ```
         """)
     
-    # Create tabs
-    tab1, tab2, tab3 = st.tabs(["Search OpenAlex", "Extract Keywords", "Paper Explorer"])
+    
+    # Navigation state
+    if 'active_tab' not in st.session_state:
+        st.session_state['active_tab'] = "Search OpenAlex"
+    
+    # Custom navigation using radio button (acts as tabs)
+    # We use a callback or manual check to update the state to avoid the "cannot modify after instantiation" error
+    # or simply use a different key for the widget and sync it manually if needed, 
+    # but the cleanest way for programmatic control is to not bind it directly if we want to change it later in the script run (which we shouldn't do usually, but we are).
+    # actually, the error happens because we set it AFTER the widget is created.
+    # The fix is to use a placeholder or handle the logic before the widget.
+    # BUT, to keep it simple: we can just use a separate key for the widget and update the main state.
+
+    # Better approach: Use on_change callback to sync.
+    def on_nav_change():
+        st.session_state['active_tab'] = st.session_state['nav_radio']
+
+    st.radio(
+        "Navigation", 
+        ["Search OpenAlex", "Extract Keywords", "Paper Explorer"], 
+        key="nav_radio", 
+        index=["Search OpenAlex", "Extract Keywords", "Paper Explorer"].index(st.session_state['active_tab']),
+        horizontal=True, 
+        label_visibility="collapsed",
+        on_change=on_nav_change
+    )
     
     # Initialize session state variables if they don't exist
     if 'search_results' not in st.session_state:
@@ -476,7 +490,7 @@ def main():
     if 'selected_keyword' not in st.session_state:
         st.session_state['selected_keyword'] = None
     
-    with tab1:
+    if st.session_state['active_tab'] == "Search OpenAlex":
         st.header("Search Academic Papers")
         
         # Search form
@@ -558,7 +572,8 @@ def main():
                                 if st.button(f"View Paper Details #{i}"):
                                     st.session_state['selected_paper'] = works_df.iloc[i]
                                     # Switch to next tab
-                                    st.experimental_set_query_params(tab="extract_keywords")
+                                    st.session_state['active_tab'] = "Extract Keywords"
+                                    st.rerun()
                                 
         
                                 st.divider()
@@ -592,11 +607,12 @@ def main():
                     if st.button(f"View Paper Details #{i}"):
                         st.session_state['selected_paper'] = works_df.iloc[i]
                         # Switch to next tab
-                        st.experimental_set_query_params(tab="extract_keywords")
+                        st.session_state['active_tab'] = "Extract Keywords"
+                        st.rerun()
                     
                     st.divider()
     
-    with tab2:
+    if st.session_state['active_tab'] == "Extract Keywords":
         st.header("Extract Keywords from Paper")
         
         if st.session_state['selected_paper'] is not None:
@@ -687,7 +703,7 @@ def main():
         else:
             st.info("Select a paper from the 'Search OpenAlex' tab to extract keywords.")
     
-    with tab3:
+    if st.session_state['active_tab'] == "Paper Explorer":
         st.header("Paper Explorer")
         
         # Check if keywords are available
