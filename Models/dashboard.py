@@ -392,6 +392,8 @@ def main():
         st.cache_data.clear()
         st.session_state.data = None
         st.rerun()
+
+    st.sidebar.caption("Deployed Build: v1.0.1")
     
     # Initialize session state
     if 'update_clicked' not in st.session_state:
